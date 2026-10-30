@@ -31,4 +31,9 @@ def AltBST.insert (t : AltBST β) (k : Nat) (v : β) : AltBST β :=
     else t ++ List.replicate (i + 1 - t.length) (none : Option (Nat × β))
   res.set i (some (k, v))
 
+def AltBST.Valid (t : AltBST β) : Prop :=
+  ∀ i k v,
+    t[i]? = some (some (k, v)) →
+    t.locate k 0 = i
+
 end AlternativeBST
