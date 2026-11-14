@@ -1,0 +1,171 @@
+\documentclass[10pt]{article}
+\usepackage[margin=0.9in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45em}
+\lstdefinelanguage{Lean}{
+  morekeywords={abbrev,def,theorem,namespace,end,if,then,else,match,with,let,in,by,simp,unfold,termination_by,where,Prop,Type,Nat,Option,List,some,none,sorry},
+  sensitive=true,
+  morecomment=[l]{--},
+  morecomment=[s]{/-}{-/},
+  morestring=[b]"
+}
+\lstset{
+  language=Lean,
+  basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{blue!60!black},
+  commentstyle=\color{gray!75!black},
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  literate={β}{{$\beta$}}1 {×}{{$\times$}}1 {∀}{{$\forall$}}1 {→}{{$\to$}}1,
+  frame=single,
+  framesep=5pt,
+  xleftmargin=0.3em,
+  xrightmargin=0.3em
+}
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Definition}
+
+\title{Formalizing an Array-Based Binary Search Tree in Lean 4}
+\author{21-321: Interactive Theorem Proving\\Final Project Report}
+\date{Fall 2026}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+A binary search tree (BST) stores key--value pairs in a tree whose ordering makes lookup depend on comparisons rather than examining every entry. In the usual recursive representation, each node contains a key, a value, and references to left and right subtrees. The search procedure compares the requested key with the current node's key, moves left if it is smaller, moves right if it is larger, and stops if it finds an equal key or an empty subtree.
+
+Our project investigates a different way to represent the same tree structure: storing its nodes in a list, with each node's position determining the positions of its children. This representation changes the implementation substantially. Instead of following recursive tree constructors, a search calculates numeric indices into a potentially sparse list. As a result, familiar BST properties must be expressed in terms of list positions and the behavior of an index-based search function.
+
+The broader goal is to formalize an alternative BST in Lean 4 and establish that it behaves like a conventional BST, particularly with respect to insertion and lookup. The current development defines the alternative representation and its operations, states an invariant that connects stored nodes to their search locations, and proves basic properties of the search procedure. The more substantial insertion-preservation results are stated but not yet proved. Thus, the work described here is a foundation for a future equivalence theorem, rather than a completed equivalence proof.
+
+\section{Representation and Operations}
+
+\subsection{Encoding a tree as a list}
+
+We use natural numbers for keys and an arbitrary type $\beta$ for values. The alternative tree is defined in Lean by
+
+\begin{lstlisting}
+abbrev AltBST (β : Type u) :=
+  List (Option (Nat × β))
+
+def AltBST.leaf : AltBST β := []
+\end{lstlisting}
+
+Each list entry is either \texttt{none}, denoting an unused position, or \texttt{some (k, v)}, denoting a node containing key $k$ and value $v$. The empty list represents an empty tree.
+
+We interpret list positions using the same indexing convention as a binary heap. For a node at index $i$, its left and right children are located at
+\[
+  \operatorname{left}(i)=2i+1,
+  \qquad
+  \operatorname{right}(i)=2i+2.
+\]
+The root, if present, occupies index $0$. For example, a root at index $0$ has children at indices $1$ and $2$, while the children of index $1$ are at indices $3$ and $4$. Empty positions may need to appear explicitly in the list so that a node can be stored at the index corresponding to its path from the root.
+
+This is the central design choice of the project. It provides a simple numerical description of tree structure, but it also means that the underlying list can contain gaps and that insertion may require extending the list beyond its previous length.
+
+\subsection{Searching for a location}
+
+The main auxiliary operation is \texttt{AltBST.locate}, which takes a tree $t$, a key $k$, and a starting index $i$. It returns the index where search stops. Its behavior can be summarized as follows:
+\[
+\operatorname{locate}(t,k,i)=
+\begin{cases}
+ i, & i\geq |t|,\\
+ i, & t[i]=\texttt{none},\\
+ \operatorname{locate}(t,k,2i+1), & t[i]=\texttt{some}(k',v),\ k<k',\\
+ \operatorname{locate}(t,k,2i+2), & t[i]=\texttt{some}(k',v),\ k'<k,\\
+ i, & t[i]=\texttt{some}(k,v).
+\end{cases}
+\]
+In the fourth case, the condition simply says $k>k'$. Thus, the routine follows the usual BST comparison rule, but returns an index instead of a subtree or an optional value. The Lean definition uses the measure \texttt{t.length - i} in its termination argument: as the search moves to a child index, this distance decreases while the index remains within the list.
+
+Lookup is then defined in terms of this location:
+\begin{lstlisting}
+def AltBST.find? (t : AltBST β) (k : Nat) : Option β :=
+  match t.getD (AltBST.locate t k 0) none with
+  | none => none
+  | some (key, value) =>
+      if key = k then some value else none
+\end{lstlisting}
+The search begins at the root. If the resulting index holds the requested key, \texttt{find?} returns its associated value; otherwise, it returns \texttt{none}. The final key comparison is important because \texttt{locate} may stop at an unused position or at an index beyond the current list.
+
+\subsection{Insertion}
+
+Insertion also begins by computing $i=\operatorname{locate}(t,k,0)$. If $i$ is already within the list, the implementation uses the existing list. Otherwise, it appends enough \texttt{none} entries to make index $i$ available. It then sets entry $i$ to \texttt{some (k,v)}:
+
+\begin{lstlisting}
+def AltBST.insert (t : AltBST β)
+    (k : Nat) (v : β) : AltBST β :=
+  let i := AltBST.locate t k 0
+  let res :=
+    if i < t.length then t
+    else t ++ List.replicate (i + 1 - t.length)
+      (none : Option (Nat × β))
+  res.set i (some (k, v))
+\end{lstlisting}
+
+If the key is already present, this operation replaces the value at its search location. If the search stops at an empty location, it creates a node there. The list-extension step is specific to the index-based representation: it preserves the positions implied by the left- and right-child formulas.
+
+\section{Correctness Invariant and Initial Proofs}
+
+\subsection{Validity of a representation}
+
+A list of optional key--value pairs is not necessarily a well-formed BST. For example, placing a key at an arbitrary list index need not make that key reachable by the comparison-based search starting at the root. We therefore define validity through a property of \texttt{locate}:
+\begin{lstlisting}
+def AltBST.Valid (t : AltBST β) : Prop :=
+  forall i k v,
+    t[i]? = some (some (k, v)) ->
+    t.locate k 0 = i
+\end{lstlisting}
+
+In mathematical notation, the invariant is
+\[
+  \operatorname{Valid}(t)
+  \iff
+  \forall i,k,v,\quad
+  t[i]=\operatorname{some}(k,v)
+  \implies \operatorname{locate}(t,k,0)=i,
+\]
+where the premise also requires that index $i$ is in bounds. In other words, every stored node must be discoverable at exactly its own position when searched for by its key from the root. This condition expresses the essential search-order requirement without defining a separate recursive predicate over subtrees.
+
+\subsection{Established lemmas}
+
+The initial proof file establishes three local facts about the location procedure, together with validity of the empty tree:
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=0.25em]
+\item \textbf{Empty tree:} \texttt{AltBST.leaf\_valid} proves that the empty tree is valid. The invariant holds vacuously because the empty list contains no stored nodes.
+\item \textbf{Out-of-bounds search:} \texttt{AltBST.locate\_out\_of\_bounds} proves that if $|t|\le i$, then $\operatorname{locate}(t,k,i)=i$.
+\item \textbf{Empty position:} \texttt{AltBST.locate\_none} proves that if $i<|t|$ and $t[i]=\texttt{none}$, then $\operatorname{locate}(t,k,i)=i$.
+\item \textbf{Matching key:} \texttt{AltBST.locate\_key} proves that if $i<|t|$ and $t[i]=\texttt{some}(k,v)$, then $\operatorname{locate}(t,k,i)=i$.
+\end{enumerate}
+
+These are direct consequences of the definition of \texttt{locate}, and the Lean proofs use unfolding and simplification. They clarify the stopping conditions used by later arguments about insertion.
+
+\subsection{Insertion-preservation goals}
+
+Two further theorems are present in the development, but their proofs currently contain \texttt{sorry}. The first states that inserting a key does not change the index at which a search for that key stops:
+\[
+  \operatorname{locate}(\operatorname{insert}(t,k,v),k,0)
+  =\operatorname{locate}(t,k,0).
+\]
+The second states that insertion preserves the validity invariant:
+\[
+  \operatorname{Valid}(t)
+  \implies \operatorname{Valid}(\operatorname{insert}(t,k,v)).
+\]
+These results are especially important for the intended comparison with a conventional BST. Together with suitable lookup specifications, they would help establish that the list-based implementation maintains the search behavior expected from an ordered map. The remaining work must justify not only the newly inserted node's location, but also that insertion does not invalidate the search paths of nodes already present in the tree.
+
+% The second half of the report can discuss further proofs, the intended
+% equivalence relation with a recursive BST, Lean-specific difficulties,
+% lessons learned, and final reflections.
+
+\end{document}
