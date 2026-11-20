@@ -241,14 +241,14 @@ theorem locate_pad_eq (t : AltBST β) (n k : Nat) :
         have hs2 := locate_step
           (t ++ List.replicate n (none : Option (Nat × β))) k start key w hw'
         by_cases hlt1 : k < key
-        · rw [if_pos hlt1] at hs1 hs2
+        · rw [ite_eq_left hlt1] at hs1 hs2
           rw [hs2, hs1]
           exact ih (2 * start + 1) (by omega)
         · by_cases hgt : key < k
-          · rw [if_neg hlt1, if_pos hgt] at hs1 hs2
+          · rw [ite_eq_right hlt1, ite_eq_left hgt] at hs1 hs2
             rw [hs2, hs1]
             exact ih (2 * start + 2) (by omega)
-          · rw [if_neg hlt1, if_neg hgt] at hs1 hs2
+          · rw [ite_eq_right hlt1, ite_eq_right hgt] at hs1 hs2
             rw [hs1, hs2]
 
 theorem locate_congr
@@ -283,26 +283,26 @@ theorem locate_congr
         exact locate_stop_key s k start hstop
       · have hs := locate_step t k start key w hw
         by_cases hlt : k < key
-        · rw [if_pos hlt] at hs
+        · rw [ite_eq_left hlt] at hs
           have hge := locate_ge t k t.length (2 * start + 1) (by omega)
           have hpre := hprefix start (by omega)
           have hsw : s[start]? = some (some (key, w)) := by
             rw [← hpre]; exact hw
           have hss := locate_step s k start key w hsw
-          rw [if_pos hlt] at hss
+          rw [ite_eq_left hlt] at hss
           rw [hss]
           exact ih (2 * start + 1) (by omega) (by omega)
         · by_cases hgt : key < k
-          · rw [if_neg hlt, if_pos hgt] at hs
+          · rw [ite_eq_right hlt, ite_eq_left hgt] at hs
             have hge := locate_ge t k t.length (2 * start + 2) (by omega)
             have hpre := hprefix start (by omega)
             have hsw : s[start]? = some (some (key, w)) := by
               rw [← hpre]; exact hw
             have hss := locate_step s k start key w hsw
-            rw [if_neg hlt, if_pos hgt] at hss
+            rw [ite_eq_right hlt, ite_eq_left hgt] at hss
             rw [hss]
             exact ih (2 * start + 2) (by omega) (by omega)
-          · rw [if_neg hlt, if_neg hgt] at hs
+          · rw [ite_eq_right hlt, ite_eq_right hgt] at hs
             have hi : i = start := by omega
             rw [hi] at hstop ⊢
             exact locate_stop_key s k start hstop
@@ -310,8 +310,7 @@ theorem locate_congr
 
 theorem locate_append_none
     (t : AltBST β) (k i : Nat)
-    (h : t.locate k 0 = i)
-    (hi : t.length ≤ i) :
+    (h : t.locate k 0 = i) :
     (t ++ List.replicate (i + 1 - t.length)
       (none : Option (Nat × β))).locate k 0 = i := by
   rw [locate_pad_eq t (i + 1 - t.length) k t.length 0 (by omega)]
@@ -321,8 +320,7 @@ theorem locate_set_new_key
     (t : AltBST β) (k i : Nat)
     (v : β)
     (h : t.locate k 0 = i)
-    (hi : i < t.length)
-    (hnone : t[i] = none) :
+    (hi : i < t.length) :
     AltBST.locate
     (List.set t i (some (k, v))) k 0 = i := by
   exact locate_congr t (List.set t i (some (k, v))) k 0 i h
@@ -355,7 +353,7 @@ theorem AltBST.locate_insert_same
     · -- empty slot: inserting a new key
       rw [List.getElem?_eq_getElem hlt] at h
       have hnone : t[i] = none := Option.some.inj h
-      exact locate_set_new_key t k i v hi hlt hnone
+      exact locate_set_new_key t k i v hi hlt
     · -- slot already holds key k: overwriting its value
       rw [List.getElem?_eq_getElem hlt] at h
       have hkey : t[i] = some (k, w) := Option.some.inj h
@@ -363,7 +361,7 @@ theorem AltBST.locate_insert_same
   · -- the slot is past the end: pad with `none`s, then set
     rw [ite_eq_right hlt]
     have hge : t.length ≤ i := Nat.not_lt.mp hlt
-    have hloc := locate_append_none t k i hi hge
+    have hloc := locate_append_none t k i hi
     have hlen : i < (t ++ List.replicate (i + 1 - t.length)
         (none : Option (Nat × β))).length := by
       simp only [List.length_append, List.length_replicate]
@@ -373,7 +371,7 @@ theorem AltBST.locate_insert_same
     rw [List.getElem?_eq_getElem hlen] at h2
     have hnone : (t ++ List.replicate (i + 1 - t.length)
         (none : Option (Nat × β)))[i] = none := Option.some.inj h2
-    exact locate_set_new_key _ k i v hloc hlen hnone
+    exact locate_set_new_key _ k i v hloc hlen
 
 def keyAt (t : AltBST β) (m : Nat) : Option Nat :=
   ((t[m]?).bind id).map Prod.fst
