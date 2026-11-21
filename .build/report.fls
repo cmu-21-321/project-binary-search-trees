@@ -200,6 +200,7 @@ INPUT /usr/share/texmf-dist/fonts/enc/dvips/lm/lm-mathsy.enc
 INPUT /usr/share/texmf-dist/fonts/enc/dvips/lm/lm-rm.enc
 INPUT /usr/share/texmf-dist/fonts/enc/dvips/lm/lm-mathex.enc
 INPUT /usr/share/texmf-dist/fonts/tfm/public/lm/ec-lmbx10.tfm
+INPUT /usr/share/texmf-dist/fonts/tfm/public/lm/ec-lmri10.tfm
 INPUT .build/report.aux
 INPUT .build/report.out
 INPUT .build/report.out
@@ -211,6 +212,8 @@ INPUT /usr/share/texmf-dist/fonts/type1/public/lm/lmmi7.pfb
 INPUT /usr/share/texmf-dist/fonts/type1/public/lm/lmr10.pfb
 INPUT /usr/share/texmf-dist/fonts/type1/public/lm/lmr12.pfb
 INPUT /usr/share/texmf-dist/fonts/type1/public/lm/lmr17.pfb
+INPUT /usr/share/texmf-dist/fonts/type1/public/lm/lmr7.pfb
+INPUT /usr/share/texmf-dist/fonts/type1/public/lm/lmri10.pfb
 INPUT /usr/share/texmf-dist/fonts/type1/public/lm/lmsy10.pfb
 INPUT /usr/share/texmf-dist/fonts/type1/public/lm/lmsy7.pfb
 INPUT /usr/share/texmf-dist/fonts/type1/public/lm/lmtt10.pfb

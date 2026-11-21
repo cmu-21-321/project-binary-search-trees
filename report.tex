@@ -164,9 +164,65 @@ The second states that insertion preserves the validity invariant:
 \]
 These results are especially important for the intended comparison with a conventional BST. Together with suitable lookup specifications, they would help establish that the list-based implementation maintains the search behavior expected from an ordered map. The remaining work must justify not only the newly inserted node's location, but also that insertion does not invalidate the search paths of nodes already present in the tree.
 
-% The second half of the report can discuss further proofs, the intended
-% equivalence relation with a recursive BST, Lean-specific difficulties,
-% lessons learned, and final reflections.
+\section{Proof Strategy for Insertion}
+
+The next step is to establish that insertion preserves the meaning of the index-based representation. The two unfinished theorems isolate different aspects of this problem: \texttt{locate\_insert\_same} concerns the newly inserted key, while \texttt{insert\_valid} concerns every node in the resulting tree. Neither theorem has a completed Lean proof in the current development, so the arguments below describe a proposed approach rather than verified results.
+
+\subsection{Preserving the inserted key's location}
+
+Write $i=\operatorname{locate}(t,k,0)$ and $t'=\operatorname{insert}(t,k,v)$. The desired equality is
+\[
+    \operatorname{locate}(t',k,0)=i.
+\]
+The critical observation is that \texttt{locate} stops at $i$ for one of three reasons: the position is out of bounds, the position contains \texttt{none}, or the position contains the requested key. The insertion operation changes precisely this stopping position to \texttt{some (k,v)}. Therefore, if the search follows the same earlier indices in $t'$ as in $t$, it reaches $i$ again and stops there because the key matches.
+
+A formal proof would need to make this argument precise by showing that the earlier nodes on the search path remain unchanged. When $i$ lies beyond the original list, the list is extended with \texttt{none} entries before writing the node at $i$; when $i$ is already in bounds, the list's length does not change. These cases suggest useful auxiliary lemmas about \texttt{List.replicate}, list append, and \texttt{List.set}, together with a property of \texttt{locate} when entries along its search path are unchanged.
+
+\subsection{Preserving validity}
+
+Validity requires that \emph{every} stored key be located at its own index. For insertion, it is useful to distinguish two kinds of nodes. The node written at $i$ is handled by the preceding location-preservation claim. For an old node at index $j\ne i$, insertion leaves its key--value pair unchanged, but that fact alone is insufficient: we must also show that searching for the old key still terminates at $j$.
+
+For a valid input tree, the existing node is reachable along a sequence of comparisons. Replacing a node at the stopping position for $k$ should not interfere with a search for a distinct stored key. If the insertion appends list entries, the added entries are empty except at $i$, and existing indices retain their previous contents. A complete proof would need a lemma expressing that searches for other stored keys are preserved by this localized update. The overall proof can then apply the definition of \texttt{Valid} to an arbitrary occupied position in $t'$ and split into the newly written index and the preexisting positions.
+
+This illustrates why proving \texttt{insert\_valid} is substantially harder than proving the initial stopping-condition lemmas. The latter unfold a single step of \texttt{locate}; validity preservation must reason about an entire comparison-guided path while accounting for changes to the underlying list.
+
+\section{Design Decisions and Formalization Challenges}
+
+\subsection{Choosing an invariant based on lookup}
+
+A conventional BST invariant is often stated recursively: every key in a left subtree is smaller than the current key, and every key in a right subtree is larger. Our list representation does not expose left and right subtrees as recursive values. Expressing the conventional condition directly would require extra definitions to identify descendants by index and reason about all of them.
+
+Instead, \texttt{AltBST.Valid} states that searching from the root finds every stored key at its actual index. This choice ties the representation invariant directly to the operation we eventually want to verify. It also captures several properties implicitly: a stored node must be reachable from the root, and two different occupied positions cannot contain the same key in a valid tree, since \texttt{locate} is a function and cannot return two distinct indices for a single input key. The tradeoff is that proofs about validity depend on the behavior of a recursive search function, rather than on a purely structural ordering predicate.
+
+\subsection{Sparse indices and termination}
+
+The heap-style formulas $2i+1$ and $2i+2$ make child relationships easy to calculate, but they can produce a sparse list. For example, repeated rightward steps follow indices $0,2,6,14,\ldots$, so a small number of stored nodes may require many empty entries. The representation consequently prioritizes an explicit correspondence between tree paths and list positions, not space efficiency.
+
+The recursion in \texttt{locate} also requires a termination argument. Each recursive call moves to a strictly larger index, but the index itself is increasing rather than decreasing. The implementation therefore uses the measure $|t|-i$. While the search remains in bounds, moving to a child decreases this measure; once the index leaves the list, the function returns immediately. This is an example of an implementation detail that becomes especially visible in a proof assistant: an intuitive terminating procedure must be accompanied by a measure that Lean can check.
+
+\subsection{Separating small lemmas from global properties}
+
+The completed proofs concern base cases that follow from the definition of \texttt{locate}: stopping out of bounds, at an empty position, or at a matching key. Stating these as separate theorems makes the intended behavior explicit and provides reusable facts for larger proofs. At the same time, these local results do not by themselves establish anything about the whole search path. Moving from one-step simplification to an inductive argument over paths is the main remaining proof-design challenge.
+
+\section{Relation to a Conventional BST and Future Work}
+
+The motivating equivalence claim compares two representations of the same finite key--value mapping. A conventional recursive BST organizes nodes through left and right subtrees, whereas our alternative uses a list of optional nodes with child indices determined arithmetically. The appropriate notion of equivalence is therefore \emph{observational}: two trees should return the same answer for each key, even though their internal structures differ.
+
+One possible specification is to define a relation $R(s,t)$ between a recursive BST $s$ and a valid alternative tree $t$ by
+\[
+  R(s,t)\quad\Longleftrightarrow\quad
+  \forall k,\;\operatorname{find?}_{\mathrm{recursive}}(s,k)
+      =\operatorname{find?}_{\mathrm{alternative}}(t,k).
+\]
+With suitable definitions of the recursive tree's operations, the desired insertion theorem would say that equivalent trees remain equivalent after inserting the same key and value into both representations. This would require lookup-after-insertion results, including that the inserted key maps to the new value and that other keys retain their previous values.
+
+The supplied files do not yet define a conventional recursive BST or this equivalence relation. They also do not yet contain completed insertion proofs. Consequently, establishing these specifications and proving them are future work, not claims about the current formalization. The most immediate next milestone is to complete \texttt{locate\_insert\_same} and \texttt{insert\_valid}; after that, lookup correctness can provide the bridge from representation invariants to observable behavior.
+
+\section{Conclusion}
+
+This project develops the basic framework for an array-indexed binary search tree in Lean 4. The current implementation includes a sparse list representation, comparison-based search, lookup, insertion, and a validity predicate requiring every stored node to be reachable by searching for its key. Four elementary theorems are proved, establishing validity of the empty tree and the principal stopping cases for search.
+
+The remaining challenge is to connect local updates to global correctness: changing one list entry must preserve the search behavior of all other stored keys. The formalization shows how a simple change in data representation can shift the structure of the proof. Although behavioral equivalence with a recursive BST is not yet established, the present definitions and lemmas provide a concrete starting point for proving insertion preservation and, ultimately, equivalence of the two implementations.
 
 
 % Bibliography starting here
