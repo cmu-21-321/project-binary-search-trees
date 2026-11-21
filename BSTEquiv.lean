@@ -56,26 +56,6 @@ theorem getElem?_append_replicate_none
       some none := by
   simp [h1, h2]
 
-private theorem locate_set_same_key_aux
-    (t : AltBST β) (k start i : Nat)
-    (v w : β)
-    (h : t.locate k start = i)
-    (hi : i < t.length)
-    (hkey : t[i] = some (k, v)) :
-    AltBST.locate
-    (List.set t i (some (k, w))) k 0 = i := by
-  sorry
-termination_by t.length - start
-
-theorem locate_set_same_key
-    (t : AltBST β) (k : Nat) (i : Nat)
-    (v w : β)
-    (h : t.locate k 0 = i)
-    (hi : i < t.length)
-    (hkey : t[i] = some (k, v)) :
-    AltBST.locate
-    (List.set t i (some (k, w))) k 0 = i := by
-  exact locate_set_same_key_aux t k 0 i v w h hi hkey
 /-- every slot is out of bounds, empty, or holds a key -/
 theorem slot_cases (t : AltBST β) (i : Nat) :
     t[i]? = none ∨ t[i]? = some none ∨
@@ -327,6 +307,20 @@ theorem locate_set_new_key
     (fun j hj => (getElem?_set_ne t i j _ (by omega)).symm)
     (Or.inr ⟨v, by simp [hi]⟩)
 
+-- overwriting the value at a slot that already holds `k` keeps the search location
+-- (same argument as `locate_set_new_key`; it only needed to move below `locate_congr`)
+theorem locate_set_same_key
+    (t : AltBST β) (k : Nat) (i : Nat)
+    (v w : β)
+    (h : t.locate k 0 = i)
+    (hi : i < t.length)
+    (_hkey : t[i] = some (k, v)) :
+    AltBST.locate
+    (List.set t i (some (k, w))) k 0 = i := by
+  exact locate_congr t (List.set t i (some (k, w))) k 0 i h
+    (fun j hj => (getElem?_set_ne t i j _ (by omega)).symm)
+    (Or.inr ⟨w, by simp [hi]⟩)
+
 theorem locate_result_characterization
     (t : AltBST β) (k : Nat) :
     let i := t.locate k 0
@@ -351,8 +345,6 @@ theorem AltBST.locate_insert_same
       exact locate_result_characterization t k
     rcases hchar hlt with h | ⟨w, h⟩
     · -- empty slot: inserting a new key
-      rw [List.getElem?_eq_getElem hlt] at h
-      have hnone : t[i] = none := Option.some.inj h
       exact locate_set_new_key t k i v hi hlt
     · -- slot already holds key k: overwriting its value
       rw [List.getElem?_eq_getElem hlt] at h
@@ -366,11 +358,6 @@ theorem AltBST.locate_insert_same
         (none : Option (Nat × β))).length := by
       simp only [List.length_append, List.length_replicate]
       omega
-    have h2 := getElem?_append_replicate_none t (i + 1 - t.length) i hge
-      (by omega)
-    rw [List.getElem?_eq_getElem hlen] at h2
-    have hnone : (t ++ List.replicate (i + 1 - t.length)
-        (none : Option (Nat × β)))[i] = none := Option.some.inj h2
     exact locate_set_new_key _ k i v hloc hlen
 
 def keyAt (t : AltBST β) (m : Nat) : Option Nat :=
